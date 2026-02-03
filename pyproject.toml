@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plugin2mcp"
+version = "0.1.0"
+description = "Generic library for intercepting Claude Code/Cowork plugin commands and routing through MCP tools"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Your Name", email = "you@example.com" }
+]
+keywords = ["claude", "mcp", "plugin", "anthropic", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "anthropic>=0.40.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+docx = [
+    "python-docx>=1.0.0",
+]
+pdf = [
+    "pypdf>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourorg/plugin2mcp"
+Documentation = "https://github.com/yourorg/plugin2mcp#readme"
+Repository = "https://github.com/yourorg/plugin2mcp"
+
+[tool.hatch.build.targets.wheel]
+packages = ["plugin2mcp"]
