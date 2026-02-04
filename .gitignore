@@ -1,0 +1,19 @@
+# Ignore all files ending in .tmp
+*.tmp
+
+# Ignore the entire 'temp' directory
+temp/
+
+# Ignore the 'build' directory and all its contents
+build/
+
+# Ignore a specific file named 'config.local.js'
+config.local.js
+
+# Ignore the default macOS system files
+.DS_Store
+
+# More
+.claude/
+.pytest_cache/
+tests/
