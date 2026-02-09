@@ -17,7 +17,11 @@ plugin2mcp/
 ├── schema.py            # PluginInvocation, PluginResult dataclasses
 ├── prompt_builder.py    # Assembles LLM prompt from file paths
 ├── executor.py          # Makes LLM call, parses response, runs post-processor
-└── registry.py          # Post-processor registration
+├── registry.py          # Post-processor registration
+├── interceptor.py       # Core interception logic (InterceptMatch, find_intercept, build_system_message)
+├── hook.py              # PostToolUse hook entry point (stdin/stdout, invoked as python -m plugin2mcp.hook)
+├── installer.py         # CLI installer (plugin2mcp-install) for hook + intercept bindings
+└── __main__.py          # Allows python -m plugin2mcp to invoke the hook
 ```
 
 ## Key Concepts
@@ -52,6 +56,47 @@ def my_handler(result: PluginResult, invocation: PluginInvocation) -> PluginResu
     # Validate, generate files, compute fields
     return result
 ```
+
+### Command Interception (PostToolUse Hook)
+
+The interception layer routes qualified plugin commands to bound MCP servers. It works
+via Claude Code's PostToolUse hook system:
+
+1. User types `/legal:review-contract contract.docx`
+2. Claude's Skill tool fires, PostToolUse hook runs (`python -m plugin2mcp.hook`)
+3. Hook parses skill name, finds plugin directory, reads `.mcp.json` for `intercepts`
+4. If matched, outputs a `systemMessage` telling Claude to gather context then delegate
+5. Claude follows the command workflow but calls the MCP tool instead of analyzing inline
+
+**Key types:**
+- `InterceptMatch`: Dataclass with all match info (plugin_name, command_name, mcp_server_name, mcp_tool_name, paths, server_configured)
+- `find_intercept(skill_name)`: Main entry point — returns InterceptMatch or None
+- `build_system_message(match)`: Generates the systemMessage for Claude
+
+**Plugin directory search order** (`find_plugin_dir`):
+1. `installed_plugins.json` for `installPath`
+2. `~/.claude/plugins/knowledge-work-plugins/{name}/` (live copy)
+3. `~/.claude/plugins/cache/knowledge-work-plugins/{name}/*/` (cached)
+4. `~/.claude/plugins/marketplaces/*/plugins/{name}/` and `external_plugins/{name}/`
+
+**Intercept configuration** lives in the plugin's `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "my_server"],
+      "intercepts": ["review-contract"]
+    }
+  }
+}
+```
+
+**CLI installer** (`plugin2mcp-install`):
+- `install --plugin legal --server generate-redlined --commands review-contract`
+- `uninstall` — removes the PostToolUse hook
+- `status` — shows current hook and binding status
 
 ### Source Readers
 

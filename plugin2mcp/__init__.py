@@ -3,6 +3,7 @@
 from .schema import PluginInvocation, PluginResult
 from .executor import execute
 from .registry import register_postprocessor, get_postprocessor, list_postprocessors
+from .interceptor import InterceptMatch, find_intercept, build_system_message
 
 __all__ = [
     "PluginInvocation",
@@ -11,6 +12,9 @@ __all__ = [
     "register_postprocessor",
     "get_postprocessor",
     "list_postprocessors",
+    "InterceptMatch",
+    "find_intercept",
+    "build_system_message",
 ]
 
 __version__ = "0.1.0"

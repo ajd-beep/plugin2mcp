@@ -24,6 +24,75 @@ With `plugin2mcp`, you can intercept this flow:
 - **Structured Output Enforcement**: Guarantee parseable JSON alongside markdown
 - **Caching/Logging**: Track API usage, cache repeated analyses, maintain audit trails
 
+## Automatic Command Interception (PostToolUse Hook)
+
+plugin2mcp includes a PostToolUse hook that automatically intercepts qualified plugin commands and routes them to bound MCP servers.
+
+### How It Works
+
+1. User types `/legal:review-contract contract.docx`
+2. Claude's Skill tool fires and returns the command markdown
+3. The PostToolUse hook fires and checks if the command has an MCP interception binding
+4. If matched, a `systemMessage` tells Claude to gather context then delegate to the MCP tool
+5. Claude follows the command's context-gathering workflow (accepting files, asking questions, loading playbooks)
+6. Instead of analyzing inline, Claude calls the bound MCP tool (e.g., `execute_plugin_command`)
+7. The MCP tool assembles the prompt, calls the Claude API, post-processes, and returns results
+
+### Setup
+
+```bash
+# Install plugin2mcp
+pip install -e .
+
+# Install the hook and configure intercepts
+plugin2mcp-install install --plugin legal --server generate-redlined --commands review-contract
+
+# Check status
+plugin2mcp-install status
+
+# Remove the hook
+plugin2mcp-install uninstall
+```
+
+The installer:
+- Adds a PostToolUse hook to `~/.claude/settings.json`
+- Adds `"intercepts": ["review-contract"]` to the plugin's `.mcp.json`
+
+### Intercept Configuration
+
+Intercepts are defined in the plugin's `.mcp.json` via the `intercepts` field:
+
+```json
+{
+  "mcpServers": {
+    "generate-redlined": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "generate_redlined.cli", "--mcp"],
+      "intercepts": ["review-contract"]
+    }
+  }
+}
+```
+
+The `intercepts` field is a custom extension — Claude Code silently ignores unknown fields.
+
+### Programmatic API
+
+```python
+from plugin2mcp import find_intercept, build_system_message
+
+# Check if a skill has an interception binding
+match = find_intercept("legal:review-contract")
+if match:
+    print(match.mcp_server_name)   # "generate-redlined"
+    print(match.mcp_tool_name)     # "mcp__generate-redlined__execute_plugin_command"
+    print(match.server_configured) # True if server is in ~/.claude/mcp.json
+
+    # Build the systemMessage for Claude
+    message = build_system_message(match)
+```
+
 ## Installation
 
 ```bash
@@ -256,6 +325,55 @@ def execute(
 
     Returns:
         PluginResult with markdown, structured data, and generated files
+    """
+```
+
+### InterceptMatch
+
+```python
+@dataclass
+class InterceptMatch:
+    plugin_name: str        # e.g., "legal"
+    command_name: str       # e.g., "review-contract"
+    mcp_server_name: str    # e.g., "generate-redlined"
+    mcp_tool_name: str      # e.g., "mcp__generate-redlined__execute_plugin_command"
+    plugin_dir: str         # Absolute path to plugin directory
+    command_md_path: str    # Absolute path to commands/review-contract.md
+    skill_md_paths: list[str]  # Absolute paths to skills/*/SKILL.md
+    server_configured: bool # True if server is in ~/.claude/mcp.json
+```
+
+### find_intercept()
+
+```python
+def find_intercept(
+    skill_name: str,
+    plugins_root: Path | None = None,
+    installed_plugins_path: Path | None = None,
+    mcp_json_path: Path | None = None,
+) -> InterceptMatch | None:
+    """
+    Find an interception match for a qualified skill name.
+
+    Args:
+        skill_name: e.g., "legal:review-contract"
+        plugins_root: Override for ~/.claude/plugins
+        installed_plugins_path: Override for installed_plugins.json
+        mcp_json_path: Override for ~/.claude/mcp.json
+
+    Returns:
+        InterceptMatch if all lookups succeed, None otherwise.
+    """
+```
+
+### build_system_message()
+
+```python
+def build_system_message(match: InterceptMatch) -> str:
+    """
+    Generate the systemMessage that tells Claude to delegate to the MCP tool.
+
+    Returns a string suitable for the PostToolUse hook's systemMessage field.
     """
 ```
 

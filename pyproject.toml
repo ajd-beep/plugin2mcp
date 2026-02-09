@@ -39,6 +39,9 @@ pdf = [
     "pypdf>=3.0.0",
 ]
 
+[project.scripts]
+plugin2mcp-install = "plugin2mcp.installer:main"
+
 [project.urls]
 Homepage = "https://github.com/yourorg/plugin2mcp"
 Documentation = "https://github.com/yourorg/plugin2mcp#readme"
