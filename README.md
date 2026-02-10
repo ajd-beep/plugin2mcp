@@ -4,7 +4,7 @@ A generic library for intercepting Claude Code/Cowork plugin commands and routin
 
 ## What This Does
 
-When a user invokes a plugin command (e.g., `/review-contract`), the plugin system normally:
+When a user invokes a plugin command (e.g., `/my-command`), the plugin system normally:
 1. Loads command instructions + skill files into Claude's context
 2. Claude executes the workflow directly
 3. Claude produces output
@@ -30,12 +30,12 @@ plugin2mcp includes a PostToolUse hook that automatically intercepts qualified p
 
 ### How It Works
 
-1. User types `/legal:review-contract contract.docx`
+1. User types `/my-plugin:my-command document.docx`
 2. Claude's Skill tool fires and returns the command markdown
 3. The PostToolUse hook fires and checks if the command has an MCP interception binding
 4. If matched, a `systemMessage` tells Claude to gather context then delegate to the MCP tool
-5. Claude follows the command's context-gathering workflow (accepting files, asking questions, loading playbooks)
-6. Instead of analyzing inline, Claude calls the bound MCP tool (e.g., `execute_plugin_command`)
+5. Claude follows the command's context-gathering workflow (accepting files, asking questions, etc.)
+6. Instead of executing inline, Claude calls the bound MCP tool (e.g., `execute_plugin_command`)
 7. The MCP tool assembles the prompt, calls the Claude API, post-processes, and returns results
 
 ### Setup
@@ -45,18 +45,21 @@ plugin2mcp includes a PostToolUse hook that automatically intercepts qualified p
 pip install -e .
 
 # Install the hook and configure intercepts
-plugin2mcp-install install --plugin legal --server generate-redlined --commands review-contract
+plugin2mcp-install install --plugin <plugin-name> --server <mcp-server> --commands <command1,command2>
 
 # Check status
 plugin2mcp-install status
 
-# Remove the hook
+# Remove intercepts for a specific server (hook removed if no bindings remain)
+plugin2mcp-install uninstall --plugin <plugin-name> --server <mcp-server>
+
+# Remove hook unconditionally
 plugin2mcp-install uninstall
 ```
 
 The installer:
 - Adds a PostToolUse hook to `~/.claude/settings.json`
-- Adds `"intercepts": ["review-contract"]` to the plugin's `.mcp.json`
+- Adds an `"intercepts"` entry to the plugin's `.mcp.json` (creates the server entry if needed)
 
 ### Intercept Configuration
 
@@ -65,15 +68,14 @@ Intercepts are defined in the plugin's `.mcp.json` via the `intercepts` field:
 ```json
 {
   "mcpServers": {
-    "generate-redlined": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["-m", "generate_redlined.cli", "--mcp"],
-      "intercepts": ["review-contract"]
+    "my-mcp-server": {
+      "intercepts": ["my-command"]
     }
   }
 }
 ```
+
+The server entry only needs the `intercepts` field — connection details (type, command, args) are configured separately via `claude mcp add`.
 
 The `intercepts` field is a custom extension — Claude Code silently ignores unknown fields.
 
@@ -83,10 +85,10 @@ The `intercepts` field is a custom extension — Claude Code silently ignores un
 from plugin2mcp import find_intercept, build_system_message
 
 # Check if a skill has an interception binding
-match = find_intercept("legal:review-contract")
+match = find_intercept("my-plugin:my-command")
 if match:
-    print(match.mcp_server_name)   # "generate-redlined"
-    print(match.mcp_tool_name)     # "mcp__generate-redlined__execute_plugin_command"
+    print(match.mcp_server_name)   # "my-mcp-server"
+    print(match.mcp_tool_name)     # "mcp__my-mcp-server__execute_plugin_command"
     print(match.server_configured) # True if server is in ~/.claude/mcp.json
 
     # Build the systemMessage for Claude
@@ -102,7 +104,7 @@ pip install plugin2mcp
 Or install from source:
 
 ```bash
-git clone https://github.com/yourorg/plugin2mcp.git
+git clone https://github.com/ajd-beep/plugin2mcp.git
 cd plugin2mcp
 pip install -e .
 ```
@@ -114,12 +116,12 @@ pip install -e .
 ```python
 from plugin2mcp import register_postprocessor, PluginResult, PluginInvocation
 
-@register_postprocessor("review-contract")
-def review_contract_postprocess(
+@register_postprocessor("my-command")
+def my_command_postprocess(
     result: PluginResult,
     invocation: PluginInvocation,
 ) -> PluginResult:
-    """Custom post-processing for review-contract command."""
+    """Custom post-processing for my-command."""
 
     # Validate structured data
     if result.structured_data:
@@ -128,7 +130,7 @@ def review_contract_postprocess(
 
     # Generate output files
     if invocation.source_paths:
-        output_path = generate_docx(result.structured_data, invocation.source_paths[0])
+        output_path = generate_output(result.structured_data, invocation.source_paths[0])
         result.output_paths.append(output_path)
 
     return result
@@ -141,15 +143,14 @@ from plugin2mcp import PluginInvocation, execute
 
 # In your MCP tool handler:
 invocation = PluginInvocation(
-    command_name="review-contract",
-    command_md_path="/path/to/commands/review-contract.md",
-    skill_md_paths=["/path/to/skills/contract-review/SKILL.md"],
-    config_paths=["/path/to/legal.local.md"],
-    source_paths=["/path/to/contract.docx"],
+    command_name="my-command",
+    command_md_path="/path/to/commands/my-command.md",
+    skill_md_paths=["/path/to/skills/my-skill/SKILL.md"],
+    config_paths=["/path/to/config.local.md"],
+    source_paths=["/path/to/input-document.docx"],
     supplemental={
-        "side": "customer",
-        "deadline": "end of week",
-        "focus_areas": ["liability", "data protection"],
+        "context_key": "context_value",
+        "options": ["option1", "option2"],
     },
     api_key="sk-ant-...",  # Optional, uses ANTHROPIC_API_KEY env var if not set
 )
@@ -159,8 +160,8 @@ output_requirements = """
 After your markdown analysis, include a JSON block with:
 ```json
 {
-  "clauses": [...],
-  "risk_level": "high|medium|low"
+  "items": [...],
+  "summary": "..."
 }
 ```
 """
@@ -272,7 +273,7 @@ async def execute_plugin_command(
 @dataclass
 class PluginInvocation:
     # Required
-    command_name: str           # e.g., "review-contract"
+    command_name: str           # e.g., "my-command"
     command_md_path: str        # Path to command markdown
 
     # Optional instruction paths
@@ -333,12 +334,12 @@ def execute(
 ```python
 @dataclass
 class InterceptMatch:
-    plugin_name: str        # e.g., "legal"
-    command_name: str       # e.g., "review-contract"
-    mcp_server_name: str    # e.g., "generate-redlined"
-    mcp_tool_name: str      # e.g., "mcp__generate-redlined__execute_plugin_command"
+    plugin_name: str        # e.g., "my-plugin"
+    command_name: str       # e.g., "my-command"
+    mcp_server_name: str    # e.g., "my-mcp-server"
+    mcp_tool_name: str      # e.g., "mcp__my-mcp-server__execute_plugin_command"
     plugin_dir: str         # Absolute path to plugin directory
-    command_md_path: str    # Absolute path to commands/review-contract.md
+    command_md_path: str    # Absolute path to commands/my-command.md
     skill_md_paths: list[str]  # Absolute paths to skills/*/SKILL.md
     server_configured: bool # True if server is in ~/.claude/mcp.json
 ```
@@ -356,7 +357,7 @@ def find_intercept(
     Find an interception match for a qualified skill name.
 
     Args:
-        skill_name: e.g., "legal:review-contract"
+        skill_name: e.g., "my-plugin:my-command"
         plugins_root: Override for ~/.claude/plugins
         installed_plugins_path: Override for installed_plugins.json
         mcp_json_path: Override for ~/.claude/mcp.json
@@ -418,29 +419,6 @@ A user has invoked the "{command_name}" command.
 ## Output Requirements
 [your output_requirements string]
 ```
-
-## Fragile Areas
-
-If you're modifying plugin files, be aware these elements are often parsed by MCP tools:
-
-| Element | Example | Impact if Changed |
-|---------|---------|-------------------|
-| Severity indicators | GREEN, YELLOW, RED | Post-processors may expect specific values |
-| Priority tiers | Must-have, Should-have, Nice-to-have | Schema validation may fail |
-| Output format markers | `## Key Findings`, `### Clause` | JSON extraction may fail |
-
-**Safe to modify:**
-- Playbook positions and thresholds
-- Clause analysis guidance
-- Examples and explanations
-- Workflow steps (as long as output format preserved)
-
-## Examples
-
-See the `/examples` directory:
-- `legal_contract_review/` - Contract review with DOCX generation
-- `code_review/` - Code review with GitHub integration
-- `document_summary/` - Generic document summarization
 
 ## License
 
