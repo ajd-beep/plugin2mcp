@@ -157,15 +157,12 @@ invocation = PluginInvocation(
 
 # Define what structured output you need
 output_requirements = """
-After your markdown analysis, include a JSON block with:
-```json
+#After your markdown analysis, include a JSON block with:
+json
 {
   "items": [...],
   "summary": "..."
 }
-```
-"""
-
 result = execute(invocation, output_requirements)
 
 ```
