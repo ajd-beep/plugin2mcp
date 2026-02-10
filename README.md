@@ -168,10 +168,6 @@ After your markdown analysis, include a JSON block with:
 
 result = execute(invocation, output_requirements)
 
-# result.markdown - Human-readable output
-# result.structured_data - Parsed JSON
-# result.output_paths - Generated files
-# result.metadata - Timing, token usage, model info
 ```
 
 ### 3. Expose as MCP Tool
