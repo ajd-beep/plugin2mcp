@@ -2,7 +2,8 @@
 
 Commands:
     plugin2mcp-install install --plugin legal --server generate-redlined --commands review-contract
-    plugin2mcp-install uninstall
+    plugin2mcp-install uninstall --plugin legal --server generate-redlined
+    plugin2mcp-install uninstall          # removes hook only (no intercept cleanup)
     plugin2mcp-install status
 """
 
@@ -122,22 +123,23 @@ def add_intercepts(
 ) -> bool:
     """Add intercepts to a plugin's .mcp.json for the given server.
 
+    Creates the server entry if it doesn't already exist (intercept-only
+    entries don't need connection details — the MCP server is registered
+    separately via ``claude mcp add``).
+
     Args:
         plugin_dir: Path to the plugin directory containing .mcp.json
         server_name: MCP server name in the mcpServers dict
         commands: Command names to add to the intercepts list
 
     Returns:
-        True if successful, False if .mcp.json or server not found.
+        True if successful, False if .mcp.json doesn't exist and can't be created.
     """
     mcp_json_path = plugin_dir / ".mcp.json"
     data = load_json(mcp_json_path)
 
-    servers = data.get("mcpServers", {})
-    if server_name not in servers:
-        return False
-
-    server_config = servers[server_name]
+    servers = data.setdefault("mcpServers", {})
+    server_config = servers.setdefault(server_name, {})
     existing = server_config.get("intercepts", [])
     if not isinstance(existing, list):
         existing = []
@@ -148,6 +150,42 @@ def add_intercepts(
             existing.append(cmd)
 
     server_config["intercepts"] = existing
+    save_json(mcp_json_path, data)
+    return True
+
+
+def remove_intercepts(
+    plugin_dir: Path,
+    server_name: str,
+) -> bool:
+    """Remove a server's intercept entry from a plugin's .mcp.json.
+
+    If the server entry contains only ``intercepts`` (no connection config),
+    the entire entry is removed.  If it has other keys, only ``intercepts``
+    is deleted.
+
+    Args:
+        plugin_dir: Path to the plugin directory containing .mcp.json
+        server_name: MCP server name to remove
+
+    Returns:
+        True if the entry was found and removed, False otherwise.
+    """
+    mcp_json_path = plugin_dir / ".mcp.json"
+    data = load_json(mcp_json_path)
+
+    servers = data.get("mcpServers", {})
+    if server_name not in servers:
+        return False
+
+    server_config = servers[server_name]
+    has_only_intercepts = set(server_config.keys()) <= {"intercepts"}
+
+    if has_only_intercepts:
+        del servers[server_name]
+    else:
+        server_config.pop("intercepts", None)
+
     save_json(mcp_json_path, data)
     return True
 
@@ -250,10 +288,34 @@ def cmd_install(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_uninstall(_args: argparse.Namespace) -> int:
-    """Handle the 'uninstall' subcommand."""
-    uninstall_hook()
-    print("PostToolUse hook removed from settings.json")
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    """Handle the 'uninstall' subcommand.
+
+    With --plugin and --server: removes intercept bindings, then removes
+    the hook only if no bindings remain across any plugin.
+    Without args: removes the hook unconditionally.
+    """
+    plugins_root = Path.home() / ".claude" / "plugins"
+
+    if getattr(args, "plugin", None) and getattr(args, "server", None):
+        plugin_dirs = _find_all_plugin_dirs(args.plugin, plugins_root)
+        for pd in plugin_dirs:
+            if remove_intercepts(pd, args.server):
+                print(f"Removed '{args.server}' intercepts from {pd / '.mcp.json'}")
+            else:
+                print(f"No '{args.server}' entry in {pd / '.mcp.json'}")
+
+        # Remove hook only if no intercept bindings remain anywhere
+        status = get_status(plugins_root=plugins_root)
+        if not status["bindings"]:
+            uninstall_hook()
+            print("No intercept bindings remain — PostToolUse hook removed")
+        else:
+            print("Other intercept bindings still active — hook preserved")
+    else:
+        uninstall_hook()
+        print("PostToolUse hook removed from settings.json")
+
     return 0
 
 
@@ -296,7 +358,15 @@ def main() -> None:
     )
 
     # uninstall
-    subparsers.add_parser("uninstall", help="Remove PostToolUse hook")
+    uninstall_parser = subparsers.add_parser(
+        "uninstall", help="Remove intercept bindings and/or PostToolUse hook"
+    )
+    uninstall_parser.add_argument(
+        "--plugin", help="Plugin name to remove intercepts from (e.g., legal)"
+    )
+    uninstall_parser.add_argument(
+        "--server", help="MCP server name to remove (e.g., generate-redlined)"
+    )
 
     # status
     subparsers.add_parser("status", help="Show current hook and binding status")
