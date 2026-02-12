@@ -95,6 +95,28 @@ if match:
     message = build_system_message(match)
 ```
 
+### Cowork Tool Registration
+
+Cowork doesn't support PostToolUse hooks. Use `register_plugin_tools()` to auto-register
+Cowork-friendly tools that resolve instruction file paths at startup:
+
+```python
+from plugin2mcp import register_plugin_tools
+
+register_plugin_tools(
+    mcp_server=mcp,                          # FastMCP instance
+    server_name="my-mcp-server",             # as in .mcp.json
+    plugin_name="my-plugin",                 # plugin to find
+    config_paths=["/path/to/config.md"],     # playbook, preferences
+    descriptions={"my-command": "..."},      # tool descriptions
+    get_output_requirements=my_fn,           # optional callback
+)
+```
+
+This discovers the plugin directory, reads `.mcp.json` for intercepted commands,
+resolves instruction file paths, and registers a tool per command (e.g., `my_command`).
+If the plugin isn't installed, it logs a warning and registers nothing.
+
 ## Installation
 
 ```bash

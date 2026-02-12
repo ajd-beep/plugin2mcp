@@ -19,6 +19,7 @@ plugin2mcp/
 ├── executor.py          # Makes LLM call, parses response, runs post-processor
 ├── registry.py          # Post-processor registration
 ├── interceptor.py       # Core interception logic (InterceptMatch, find_intercept, build_system_message)
+├── cowork.py            # Cowork support: auto-register tools with resolved instruction paths
 ├── hook.py              # PostToolUse hook entry point (stdin/stdout, invoked as python -m plugin2mcp.hook)
 ├── installer.py         # CLI installer (plugin2mcp-install) for hook + intercept bindings
 └── __main__.py          # Allows python -m plugin2mcp to invoke the hook
@@ -56,6 +57,29 @@ def my_handler(result: PluginResult, invocation: PluginInvocation) -> PluginResu
     # Validate, generate files, compute fields
     return result
 ```
+
+### Cowork Tool Registration
+
+Cowork doesn't support PostToolUse hooks, so it can't be told to delegate via a
+systemMessage. `register_plugin_tools()` auto-discovers intercepted commands, resolves
+instruction file paths, and registers Cowork-friendly tools with directive descriptions:
+
+```python
+from plugin2mcp.cowork import register_plugin_tools
+
+register_plugin_tools(
+    mcp_server=mcp,
+    server_name="my-mcp-server",
+    plugin_name="my-plugin",
+    config_paths=["/path/to/config.local.md"],
+    descriptions={"my-command": "Execute my-command..."},
+    get_output_requirements=get_output_requirements,
+)
+```
+
+This registers tools like `my_command(source_path, context, api_key, ...)` that
+internally build a `PluginInvocation` with pre-resolved paths and call `execute()`.
+Graceful: logs warnings if the plugin isn't installed, never crashes the server.
 
 ### Command Interception (PostToolUse Hook)
 
