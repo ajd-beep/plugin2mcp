@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -92,7 +93,8 @@ def _make_handler(
     """
 
     def handler(
-        source_path: str,
+        source_path: str | None = None,
+        source_content: str | None = None,
         context: str = "{}",
         api_key: str | None = None,
         model: str | None = None,
@@ -111,6 +113,26 @@ def _make_handler(
                 "error_message": f"Invalid context JSON: {e}",
             })
 
+        # Pre-flight: check API key availability
+        has_key = (api_key and api_key.strip()) or os.environ.get(
+            "ANTHROPIC_API_KEY", ""
+        ).strip()
+        if not has_key:
+            return json.dumps({
+                "success": False,
+                "markdown": "",
+                "output_paths": [],
+                "structured_data": None,
+                "metadata": {},
+                "error_code": "no_api_key",
+                "error_message": (
+                    "No Anthropic API key found. Ask the user for their "
+                    "Anthropic API key, then call this tool again with the "
+                    "key in the api_key parameter. "
+                    "Do NOT perform the analysis yourself."
+                ),
+            })
+
         # Filter config_paths to only existing files
         valid_configs = [p for p in config_paths if Path(p).is_file()]
 
@@ -120,7 +142,8 @@ def _make_handler(
             command_md_path=command_md_path,
             skill_md_paths=list(skill_md_paths),
             config_paths=valid_configs,
-            source_paths=[source_path],
+            source_paths=[source_path] if source_path else [],
+            source_texts=[source_content] if source_content else [],
             supplemental=supplemental if supplemental else None,
             api_key=api_key,
             model=model,

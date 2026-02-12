@@ -19,6 +19,7 @@ class PluginInvocation:
         skill_md_paths: Paths to skill markdown files providing domain expertise
         config_paths: Paths to user configuration files (playbook, preferences)
         source_paths: Paths to files being analyzed/processed
+        source_texts: Raw text content to analyze (alternative to source_paths)
         supplemental: Additional runtime context from the conversation
         api_key: Anthropic API key (uses ANTHROPIC_API_KEY env var if None)
         model: Model to use (defaults to claude-sonnet-4-20250514)
@@ -37,6 +38,7 @@ class PluginInvocation:
 
     # Source material
     source_paths: list[str] = field(default_factory=list)
+    source_texts: list[str] = field(default_factory=list)
 
     # Runtime context
     supplemental: dict[str, Any] | None = None

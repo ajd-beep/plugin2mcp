@@ -115,6 +115,12 @@ def build_prompt(
         content = _read_source_file(path)
         name = Path(path).name
         source_parts.append(f"### {name}\n\n{content}")
+
+    # Include raw source texts (e.g., user-pasted content)
+    for i, text in enumerate(invocation.source_texts, 1):
+        label = f"Text input {i}" if len(invocation.source_texts) > 1 else "Text input"
+        source_parts.append(f"### {label}\n\n{text}")
+
     source_content = (
         "\n\n---\n\n".join(source_parts)
         if source_parts
